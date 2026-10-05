@@ -1,0 +1,2 @@
+# Os servidores, clientes e nós P2P usam apenas a biblioteca padrão do Python (3.9+)
+matplotlib
