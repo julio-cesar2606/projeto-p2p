@@ -1,0 +1,96 @@
+x-base: &base
+  image: projeto-p2p:latest
+  build: .
+
+services:
+  gerar:
+    <<: *base
+    profiles: ["ferramentas"]
+    command: ["python", "src/utils.py", "gerar-padrao", "--pasta", "/data/seed"]
+    volumes:
+      - ./data/seed:/data/seed
+
+  servidor-sequencial:
+    <<: *base
+    profiles: ["sequencial"]
+    command: ["python", "src/servidor_sequencial.py"]
+    environment: &env_servidor
+      PORTA: "5000"
+      PASTA: /data/seed
+      TAXA_MBPS: "${TAXA_MBPS:-50}"
+      POOL_N: "${POOL_N:-4}"
+    volumes:
+      - ./data/seed:/data/seed:ro
+    networks:
+      default:
+        aliases: [servidor]
+
+  servidor-threads:
+    <<: *base
+    profiles: ["threads"]
+    command: ["python", "src/servidor_threads.py"]
+    environment: *env_servidor
+    volumes:
+      - ./data/seed:/data/seed:ro
+    networks:
+      default:
+        aliases: [servidor]
+
+  servidor-pool:
+    <<: *base
+    profiles: ["pool"]
+    command: ["python", "src/servidor_pool.py"]
+    environment: *env_servidor
+    volumes:
+      - ./data/seed:/data/seed:ro
+    networks:
+      default:
+        aliases: [servidor]
+
+  cliente:
+    <<: *base
+    profiles: ["cs"]
+    command: ["python", "src/cliente.py"]
+    environment:
+      HOST: servidor
+      PORTA: "5000"
+      NOME: "arquivo_${TAMANHO_MB:-5}MB.bin"
+      ARQ: "${ARQ:-cs}"
+      TAMANHO_MB: "${TAMANHO_MB:-5}"
+      N_CLIENTES: "${N_CLIENTES:-1}"
+      RODADA: "${RODADA:-1}"
+      INICIO_EM: "${INICIO_EM:-0}"
+      RESULTADO: /resultados/resultados_brutos.csv
+    volumes:
+      - ./resultados:/resultados
+
+  seed:
+    <<: *base
+    profiles: ["p2p"]
+    command: ["python", "src/no_p2p.py"]
+    environment:
+      PAPEL: seed
+      ID: seed
+      PORTA: "7000"
+      ARQUIVO: "/data/seed/arquivo_${TAMANHO_MB:-5}MB.bin"
+      N_CLIENTES: "${N_CLIENTES:-1}"
+      TAXA_MBPS: "${TAXA_MBPS:-50}"
+    volumes:
+      - ./data/seed:/data/seed:ro
+
+  peer:
+    <<: *base
+    profiles: ["p2p"]
+    command: ["python", "src/no_p2p.py"]
+    environment:
+      PAPEL: peer
+      PORTA: "7000"
+      TRACKER: seed:7000
+      TAXA_MBPS: "${TAXA_MBPS:-50}"
+      TAMANHO_MB: "${TAMANHO_MB:-5}"
+      N_CLIENTES: "${N_CLIENTES:-1}"
+      RODADA: "${RODADA:-1}"
+      INICIO_EM: "${INICIO_EM:-0}"
+      RESULTADO: /resultados/resultados_brutos.csv
+    volumes:
+      - ./resultados:/resultados
