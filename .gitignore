@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/seed/*.bin
+data/peer*/*.part
+resultados/
+experimentos/graficos/
