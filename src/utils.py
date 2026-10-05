@@ -179,13 +179,17 @@ def garantir_arquivo(pasta, mb):
     return caminho
 
 CABECALHO_CSV = "arquitetura,tamanho_mb,n_clientes,rodada,cliente,tempo_s"
+
 def registrar_resultado(csv_path, arq, tamanho_mb, n, rodada, cliente, tempo):
     if not csv_path:
         return
     os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
-    linha = f"{arq},{tamanho_mb},{n},{rodada},{cliente},{tempo:.4f}\n"
-    with open(csv_path, "a") as f:
-        f.write(linha)
+    linha = f"{arq},{tamanho_mb},{n},{rodada},{cliente},{tempo:.4f}\n".encode()
+    fd = os.open(csv_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)
+    try:
+        os.write(fd, linha)
+    finally:
+        os.close(fd)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Gera arquivos de teste")

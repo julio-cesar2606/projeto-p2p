@@ -11,7 +11,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(RAIZ, "src"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils import CABECALHO_CSV, aguardar_porta, garantir_arquivo, nome_arquivo  # noqa: E402
+from utils import CABECALHO_CSV, aguardar_porta, garantir_arquivo, nome_arquivo
 import agregar
 
 TODAS = ["cs_sequencial", "cs_threads", "cs_pool", "p2p"]
@@ -54,7 +54,8 @@ def rodar_cs(arq, mb, n, rodada, taxa, pool_n, csv_tmp):
             clientes.append(subprocess.Popen(
                 [PY, os.path.join(SRC, "cliente.py"), "--host", "127.0.0.1", "--porta", str(porta),
                  "--nome", nome_arquivo(mb), "--id", f"c{i}", "--inicio-em", str(inicio),
-                 "--resultado", csv_tmp, "--arq", arq, "--tamanho-mb", str(mb), "--n", str(n),
+                 "--resultado", os.path.join(csv_tmp, f"c{i}.csv"), "--arq", arq,
+                 "--tamanho-mb", str(mb), "--n", str(n),
                  "--rodada", str(rodada)], stdout=subprocess.DEVNULL, cwd=RAIZ))
         limite = 120 + 3 * mb * n / max(taxa, 0.1)
         for c in clientes:
@@ -71,7 +72,7 @@ def rodar_p2p(mb, n, rodada, taxa, csv_tmp):
          "--taxa-mbps", str(taxa), "--espera-max", "3000"], stdout=subprocess.DEVNULL, cwd=RAIZ)
     peers = []
     try:
-        aguardar_porta("127.0.0.1", porta_seed, 300)   # a seed calcula os hashes antes de abrir a porta
+        aguardar_porta("127.0.0.1", porta_seed, 300)
         inicio = time.time() + 1.0 + 0.15 * n
         for i in range(1, n + 1):
             pasta = os.path.join(RAIZ, "data", f"peer{i}")
@@ -79,7 +80,8 @@ def rodar_p2p(mb, n, rodada, taxa, csv_tmp):
                 [PY, os.path.join(SRC, "no_p2p.py"), "--papel", "peer", "--id", f"peer{i}",
                  "--porta", str(porta_livre()), "--tracker", f"127.0.0.1:{porta_seed}",
                  "--pasta", pasta, "--taxa-mbps", str(taxa), "--inicio-em", str(inicio),
-                 "--resultado", csv_tmp, "--tamanho-mb", str(mb), "--n", str(n), "--rodada", str(rodada),
+                 "--resultado", os.path.join(csv_tmp, f"peer{i}.csv"), "--tamanho-mb", str(mb),
+                 "--n", str(n), "--rodada", str(rodada),
                  "--espera-max", "3000"], stdout=subprocess.DEVNULL, cwd=RAIZ))
         limite = 120 + 3 * mb * n / max(taxa, 0.1)
         for p in peers:
@@ -88,8 +90,25 @@ def rodar_p2p(mb, n, rodada, taxa, csv_tmp):
         encerrar(peers + [seed])
 
 
+def linhas_validas(caminho):
+    if not os.path.exists(caminho):
+        return []
+    validas = []
+    with open(caminho) as f:
+        for l in f.read().splitlines():
+            campos = l.strip().split(",")
+            if len(campos) != 6:
+                continue
+            try:
+                float(campos[-1])
+            except ValueError:
+                continue
+            validas.append(",".join(campos))
+    return validas
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser()
     ap.add_argument("--tamanhos", type=int, nargs="+", default=[5, 50, 500], help="tamanhos do arquivo em MB")
     ap.add_argument("--clientes", type=int, nargs="+", default=[1, 2, 5, 10], help="quantidades de nós clientes")
     ap.add_argument("--arquiteturas", nargs="+", default=TODAS, choices=TODAS)
@@ -120,9 +139,9 @@ def main():
                 for arq in a.arquiteturas:
                     for rodada in range(1, a.rodadas + 1):
                         feito += 1
-                        csv_tmp = os.path.join(tmpdir, "r.csv")
-                        if os.path.exists(csv_tmp):
-                            os.remove(csv_tmp)
+                        csv_tmp = os.path.join(tmpdir, "run")
+                        shutil.rmtree(csv_tmp, ignore_errors=True)
+                        os.makedirs(csv_tmp)
                         print(f"[{feito}/{total}] {arq:14s} {mb:4d} MB  {n:2d} clientes  rodada {rodada}",
                               end="  ", flush=True)
                         t0 = time.time()
@@ -130,7 +149,9 @@ def main():
                             rodar_p2p(mb, n, rodada, a.taxa_mbps, csv_tmp)
                         else:
                             rodar_cs(arq, mb, n, rodada, a.taxa_mbps, a.pool_n, csv_tmp)
-                        linhas = open(csv_tmp).read().splitlines() if os.path.exists(csv_tmp) else []
+                        linhas = []
+                        for nome in sorted(os.listdir(csv_tmp)):
+                            linhas += linhas_validas(os.path.join(csv_tmp, nome))
                         if len(linhas) != n:
                             print(f"AVISO: só {len(linhas)}/{n} clientes registraram tempo", end="  ")
                         with open(brutos, "a") as f:
@@ -144,7 +165,7 @@ def main():
                         time.sleep(0.5)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        for i in range(1, max(a.clientes) + 1):          # apaga restos de blocos dos peers
+        for i in range(1, max(a.clientes) + 1):
             pasta = os.path.join(RAIZ, "data", f"peer{i}")
             if os.path.isdir(pasta):
                 for f in os.listdir(pasta):
